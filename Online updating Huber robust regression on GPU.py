@@ -27,9 +27,6 @@ class RobustOnlineHuberRegressorGPU:
         return grad / X.shape[0]
 
     def predict(self, X):
-        import cupy as cp
-        import numpy as np
-
         # 確保 coef 和 intercept 都是 NumPy 陣列或數值
         if isinstance(self.coef_, cp.ndarray):
             coef = cp.asnumpy(self.coef_)
@@ -44,7 +41,7 @@ class RobustOnlineHuberRegressorGPU:
         return X @ coef + intercept
 
     def fit_batch(self, X_batch, y_batch):
-    # GPU：轉換為 CuPy 陣列
+        # GPU：轉換為 CuPy 陣列
         X_batch = cp.asarray(X_batch)
         y_batch = cp.asarray(y_batch)
 
@@ -78,10 +75,6 @@ class RobustOnlineHuberRegressorGPU:
             self.intercept_ = self.coef_[0]
             self.coef_ = self.coef_[1:]
         return self
-    #%%
-# This Python 3 environment comes with many helpful analytics libraries installed
-# It is defined by the kaggle/python Docker image: https://github.com/kaggle/docker-python
-# For example, here's several helpful packages to load
 
 import cupy as cp # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
@@ -182,5 +175,5 @@ plt.scatter(y_val, y_val_pred, alpha=0.3)
 plt.plot([y.min(), y.max()], [y.min(), y.max()], 'r--')
 plt.xlabel("True Values")
 plt.ylabel("Predictions")
-plt.title("Huber Regression Predictions")
+plt.title("Huber Regression Predictions on GPU")
 plt.show()

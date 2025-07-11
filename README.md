@@ -14,11 +14,14 @@ A robust regression implementation using Huber loss for online learning with bat
 
 ```bash
 pip install numpy scipy scikit-learn pandas matplotlib seaborn
+
+# For GPU support (optional)
+pip install cupy-cuda11x  # or cupy-cuda12x depending on your CUDA version
 ```
 
 ## Usage
 
-### Basic Example
+### Basic CPU Implementation
 
 ```python
 from robust_huber_regression import RobustOnlineHuberRegressor
@@ -39,6 +42,23 @@ for X_batch, y_batch in data_batches:
 model.finalize()
 
 # Make predictions
+predictions = model.predict(X_test)
+```
+
+### GPU Implementation
+
+```python
+from robust_huber_regression_gpu import RobustOnlineHuberRegressorGPU
+import cupy as cp
+
+# Initialize GPU model
+model = RobustOnlineHuberRegressorGPU(k=1.345, fit_intercept=True, reg_param=1e-4)
+
+# Train with GPU acceleration
+for X_batch, y_batch in data_batches:
+    model.fit_batch(X_batch, y_batch)
+
+model.finalize()
 predictions = model.predict(X_test)
 ```
 
@@ -129,9 +149,9 @@ The model demonstrates robust performance on the podcast dataset:
 ## File Structure
 
 ```
-├── Online updating Huber robust regression.py  # Main implementation
-├── README.md                                   # This file
-└── requirements.txt                           # Dependencies
+├── Online updating Huber robust regression.py  # CPU implementation
+├── Online updating Huber robust regression on GPU.py  # GPU implementation
+└── README.md                                   # This file
 ```
 
 ## Requirements
@@ -143,14 +163,7 @@ The model demonstrates robust performance on the podcast dataset:
 - Pandas
 - Matplotlib
 - Seaborn
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+- CuPy (optional, for GPU support)
 
 ## References
 

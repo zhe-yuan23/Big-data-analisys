@@ -1,21 +1,15 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Jun 16 17:45:18 2025
-
-@author: benker
-"""
 
 import numpy as np
 from scipy.optimize import minimize
 
 class RobustOnlineHuberRegressor:
     def __init__(self, k=1.345, fit_intercept=True, reg_param=1e-4):
-        self.k = k
-        self.fit_intercept = fit_intercept
-        self.reg_param = reg_param
-        self.A_total = None
-        self.b_total = None
-        self.coef_ = None
+        self.k = k                           # Huber損失閾值
+        self.fit_intercept = fit_intercept   # 正則化強度
+        self.reg_param = reg_param           # 累積的設計矩陣
+        self.A_total = None                  # 累積的目標向量
+        self.b_total = None                  # 回歸係數
+        self.coef_ = None                    # 截距項
         self.intercept_ = 0.0 if fit_intercept else None
 
     def _huber_loss(self, theta, X, y):
@@ -32,16 +26,22 @@ class RobustOnlineHuberRegressor:
             return X @ self.coef_
 
     def fit_batch(self, X_batch, y_batch):
+        # X_batch (array-like): 批次特徵矩陣
+        # y_batch (array-like): 批次目標值
+        # 如果需要截距項，添加全1列
         if self.fit_intercept:
             X_batch = np.column_stack([np.ones(len(X_batch)), X_batch])
         
+        # 初始化累積矩陣
         if self.A_total is None:
             n_features = X_batch.shape[1]
-            self.A_total = np.eye(n_features) * self.reg_param  # 初始化正则化
+            self.A_total = np.eye(n_features) * self.reg_param  # 初始化正則化項
             self.b_total = np.zeros(n_features)
         
+        # 使用Least Squares Method作為初始解
         theta_init = np.linalg.lstsq(X_batch, y_batch, rcond=None)[0]
         
+        # 使用L-BFGS-B優化Huber損失
         try:
             result = minimize(
                 lambda theta: self._huber_loss(theta, X_batch, y_batch),
@@ -50,14 +50,14 @@ class RobustOnlineHuberRegressor:
             )
             theta_t = result.x
         except:
-            theta_t = theta_init  # 回退到最小二乘解
+            theta_t = theta_init  # 回退到Least Squares Method解
 
         A_t = X_batch.T @ X_batch
         self.A_total += A_t
         self.b_total += A_t @ theta_t
 
     def finalize(self):
-        # 添加正则化项确保可逆
+        # 添加正則化項確保矩陣可逆
         self.A_total += np.eye(self.A_total.shape[0]) * self.reg_param
         self.coef_ = np.linalg.solve(self.A_total, self.b_total)
         
@@ -65,29 +65,14 @@ class RobustOnlineHuberRegressor:
             self.intercept_ = self.coef_[0]
             self.coef_ = self.coef_[1:]
         return self
-    #%%
-# This Python 3 environment comes with many helpful analytics libraries installed
-# It is defined by the kaggle/python Docker image: https://github.com/kaggle/docker-python
-# For example, here's several helpful packages to load
 
 import numpy as np # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 
-# Input data files are available in the read-only "../input/" directory
-# For example, running this (by clicking run or pressing Shift+Enter) will list all files under the input directory
-
-import os
-for dirname, _, filenames in os.walk('/kaggle/input'):
-    for filename in filenames:
-        print(os.path.join(dirname, filename))
-
-# You can write up to 20GB to the current directory (/kaggle/working/) that gets preserved as output when you create a version using "Save & Run All" 
-# You can also write temporary files to /kaggle/temp/, but they won't be saved outside of the current session
-
 df=pd.read_csv("playground-series-s5e4/train.csv")
-
 df.head()
 df.info()
+
 import seaborn as sns
 import matplotlib.pyplot as plt
 plt.figure(figsize=(10, 6))
@@ -127,8 +112,6 @@ df=preprocess_data(df)
 X = df.drop(columns=['Listening_Time_minutes', 'id', 'Episode_Title',"Podcast_Name"])
 y = df['Listening_Time_minutes']
 
-
-#%%
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
