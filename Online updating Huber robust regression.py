@@ -1,6 +1,6 @@
-
 import numpy as np
 from scipy.optimize import minimize
+import time
 
 class RobustOnlineHuberRegressor:
     def __init__(self, k=1.345, fit_intercept=True, reg_param=1e-4):
@@ -136,6 +136,8 @@ huber_model = RobustOnlineHuberRegressor(
     reg_param=1e-4     # 正則化強度
 )
 
+start_time = time.time()
+
 # 分批訓練
 batch_size = 10000
 for i in range(0, len(X_train_scaled), batch_size):
@@ -146,6 +148,10 @@ for i in range(0, len(X_train_scaled), batch_size):
 
 # 計算最終係數
 huber_model.finalize()
+
+total_time = time.time() - start_time
+print(f"訓練完成統計：")
+print(f"總時間: {total_time:.2f}秒")
 
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
