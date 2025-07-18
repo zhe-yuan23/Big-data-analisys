@@ -140,18 +140,20 @@ start_time = time.time()
 
 # 分批訓練
 batch_size = 10000
+compute_time = 0
 for i in range(0, len(X_train_scaled), batch_size):
     X_batch = X_train_scaled[i:i+batch_size]
     y_batch = y_train.iloc[i:i+batch_size].values  # 轉為numpy array
     
+    compute_start = time.time()    
     huber_model.fit_batch(X_batch, y_batch)
+    compute_time += time.time() - compute_start
 
 # 計算最終係數
 huber_model.finalize()
 
-total_time = time.time() - start_time
 print(f"訓練完成統計：")
-print(f"總時間: {total_time:.2f}秒")
+print(f"計算時間: {compute_time:.2f}秒")
 
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
