@@ -99,24 +99,29 @@ class DataPipeline:
             # 步驟 1：切片資料 (CPU)
             X_batch = self.X_train[i:i+self.batch_size]
             y_batch = self.y_train.iloc[i:i+self.batch_size].values
-            
-            # 步驟 2：轉換為 CuPy 陣列 (CPU→GPU)
-            X_batch_gpu = cp.asarray(X_batch)
-            y_batch_gpu = cp.asarray(y_batch)
-            
-            # 步驟 3：放入佇列 (可能會阻塞等待空間)
-            batch_data = (X_batch_gpu, y_batch_gpu, i // self.batch_size + 1)
+
+            # 步驟 2：非同步轉換為 CuPy 陣列 (CPU→GPU)
+            stream = cp.cuda.Stream(non_blocking=True)  # 建立非同步 Stream
+            with stream:
+                X_batch_gpu = cp.asarray(X_batch, order='C')  # Host → Device
+                y_batch_gpu = cp.asarray(y_batch, order='C')
+
+            # 步驟 3：放入佇列（包含 stream）
+            batch_data = (X_batch_gpu, y_batch_gpu, i // self.batch_size + 1, stream)
+            if self.data_queue.full():
+               print(f"[警告] queue 已滿，背景 thread 等待中")
+
             self.data_queue.put(batch_data)
-            
+
             if i // self.batch_size % 10 == 0:
                 print(f"完成批次 {i//self.batch_size + 1}/{self.total_batches}")
-        
+
         print("資料準備執行緒完成")
     
     def start_pipeline(self):
         """啟動資料pipeline"""
         # 啟動背景執行緒
-        self.thread = threading.Thread(target=self._data_preparation_thread, daemon=True)
+        self.thread = threading.Thread(target=self._data_preparation_thread, daemon=True) # dermon 設定為背景執行序
         self.thread.start()
         
     def get_batch(self):
@@ -133,8 +138,8 @@ class DataPipeline:
     def stop_pipeline(self):
         """停止pipeline"""
         self.finished = True
-        if hasattr(self, 'thread'):
-            self.thread.join()
+        if hasattr(self, 'thread'): # 判斷是否有thread屬性
+            self.thread.join() # join 等待執行序結束
 
 # 原始資料預處理 - 根據資料修改
 def preprocess_data(df):
@@ -149,14 +154,15 @@ def preprocess_data(df):
 # 實際資料處理和訓練程式
 # ========================================
 
-# 1. 載入資料 - 您可以修改檔案路徑
+# 1. 載入資料
 df = pd.read_csv("playground-series-s5e4/train.csv")
-df.info()
+# df.info()
 
-plt.figure(figsize=(10, 6))
-sns.boxplot(x=df["Episode_Length_minutes"])
-plt.title("Outlier Detection via Boxplot")
-plt.show()
+# plt.figure(figsize=(10, 6))
+# sns.boxplot(x=df["Episode_Length_minutes"])
+# plt.title("Outlier Detection via Boxplot")
+# plt.show()
+
 # 2. 資料預處理 - 依據您的資料需求修改
 print(df[df["Episode_Length_minutes"] > 300])
 df = df.drop(101637, axis=0)  # 異常值處理
@@ -221,7 +227,8 @@ while True:
     if batch_data is None:
         break
         
-    X_batch, y_batch, batch_id = batch_data
+    X_batch, y_batch, batch_id, stream = batch_data
+    stream.synchronize()  # 等待非同步傳輸完成
     
     # GPU 運算
     gpu_start = time.time()
@@ -231,9 +238,6 @@ while True:
     # 標記完成
     pipeline.mark_batch_done()
     batch_count += 1
-    
-    if batch_count % 10 == 0:
-        print(f"GPU 處理完成批次 {batch_count}")
 
 # 停止pipeline
 pipeline.stop_pipeline()
@@ -245,7 +249,7 @@ total_time = time.time() - start_time
 print(f"訓練完成統計：")
 print(f"總時間: {total_time:.2f}秒")
 print(f"GPU 運算時間: {gpu_time:.2f}秒")
-print(f"GPU 使用率: {gpu_time/total_time*100:.1f}%")
+print(f"GPU 使用時間佔比: {gpu_time/total_time*100:.1f}%")
 print(f"處理批次數: {batch_count}")
 
 # 8. 驗證模型
