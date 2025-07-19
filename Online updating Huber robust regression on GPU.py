@@ -49,28 +49,29 @@ class RobustOnlineHuberRegressorGPU:
 
         return X @ coef + intercept
 
-    def fit_batch(self, X_batch, y_batch):
-        # 資料已經是 CuPy 陣列，不需要再轉換
-        if self.fit_intercept:
-            X_batch = cp.column_stack([cp.ones(len(X_batch)), X_batch])
-        
-        if self.A_total is None:
-            n_features = X_batch.shape[1]
-            self.A_total = cp.eye(n_features) * self.reg_param
-            self.b_total = cp.zeros(n_features)
-        
-        # 初始值用最小二乘
-        theta_t = cp.linalg.lstsq(X_batch, y_batch, rcond=None)[0]
+    def fit_batch(self, X_batch, y_batch, stream=None):
+        # 在指定 stream 中執行 GPU 運算
+        with stream if stream is not None else cp.cuda.Stream.null:
+            if self.fit_intercept:
+                X_batch = cp.column_stack([cp.ones(len(X_batch)), X_batch])
+            
+            if self.A_total is None:
+                n_features = X_batch.shape[1]
+                self.A_total = cp.eye(n_features) * self.reg_param
+                self.b_total = cp.zeros(n_features)
+            
+            # 初始值用最小二乘
+            theta_t = cp.linalg.lstsq(X_batch, y_batch, rcond=None)[0]
 
-        # 手動梯度下降
-        for _ in range(100):
-            grad = self._huber_grad(theta_t, X_batch, y_batch)
-            theta_t -= 0.01 * grad
+            # 手動梯度下降
+            for _ in range(100):
+                grad = self._huber_grad(theta_t, X_batch, y_batch)
+                theta_t -= 0.01 * grad
 
-        # 累積統計量
-        A_t = X_batch.T @ X_batch
-        self.A_total += A_t
-        self.b_total += A_t @ theta_t
+            # 累積統計量
+            A_t = X_batch.T @ X_batch
+            self.A_total += A_t
+            self.b_total += A_t @ theta_t
 
     def finalize(self):
         self.A_total += cp.eye(self.A_total.shape[0]) * self.reg_param
@@ -217,9 +218,10 @@ pipeline = DataPipeline(X_train_scaled, y_train, batch_size)
 start_time = time.time()
 pipeline.start_pipeline()
 
-# 主迴圈：GPU 運算
+# 主迴圈：GPU 運算與記憶體傳輸重疊
 batch_count = 0
 gpu_time = 0
+prev_stream = None
 
 while True:
     # 從佇列取得批次資料
@@ -228,16 +230,26 @@ while True:
         break
         
     X_batch, y_batch, batch_id, stream = batch_data
-    stream.synchronize()  # 等待非同步傳輸完成
     
-    # GPU 運算
+    # 等待前一個批次的 GPU 運算完成（如果有的話）
+    if prev_stream is not None:
+        prev_stream.synchronize()
+    
+    # GPU 運算（使用當前批次的 stream，與下一批次的記憶體傳輸重疊）
     gpu_start = time.time()
-    huber_model.fit_batch(X_batch, y_batch)
+    huber_model.fit_batch(X_batch, y_batch, stream)
     gpu_time += time.time() - gpu_start
     
     # 標記完成
     pipeline.mark_batch_done()
     batch_count += 1
+    
+    # 保存當前 stream 供下次迭代同步用
+    prev_stream = stream
+
+# 等待最後一個批次完成
+if prev_stream is not None:
+    prev_stream.synchronize()
 
 # 停止pipeline
 pipeline.stop_pipeline()
