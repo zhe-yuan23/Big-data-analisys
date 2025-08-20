@@ -1,17 +1,15 @@
 # Online Updating Huber Robust Regression
 
-A robust regression implementation using Huber loss for online learning with batch processing capabilities. This project demonstrates how to build a robust regression model that can handle outliers effectively while supporting incremental learning.
+A robust regression implementation using Huber loss for online learning with batch processing.  
+This project demonstrates both **CPU** and **GPU** versions that can handle outliers effectively while supporting incremental learning.
 
 ## Features
-
-- **Robust to Outliers**: Uses Huber loss function which is less sensitive to outliers than squared loss
-- **Online Learning**: Supports batch-wise training for large datasets
-- **GPU Acceleration**: CUDA-optimized implementation with CuPy for significant speedup
-- **Advanced Data Pipeline**: Asynchronous data loading with background threading
-- **Memory Transfer Optimization**: Overlapped CPU↔GPU memory transfers using CUDA streams
-- **Regularization**: Includes L2 regularization to prevent overfitting
-- **Flexible**: Supports both with and without intercept fitting
-- **Performance Monitoring**: Detailed timing statistics and GPU utilization tracking
+- **Robust to Outliers**: Uses Huber loss, less sensitive to outliers than squared loss
+- **Online Learning**: Batch-wise training for large datasets
+- **GPU Acceleration**: CUDA-optimized with CuPy for speedup
+- **Asynchronous Data Pipeline**: Background threading + CUDA streams
+- **Regularization**: L2 penalty to prevent overfitting
+- **Performance Monitoring**: Timing statistics and GPU utilization
 
 ## Installation
 
@@ -21,7 +19,9 @@ pip install numpy scipy scikit-learn pandas matplotlib seaborn
 # For GPU support (optional)
 pip install cupy-cuda11x  # or cupy-cuda12x depending on your CUDA version
 ```
-
+## Dataset
+playground-series-s5e4/train.csv
+You can download it from Kaggle [Playground Series S5E4](https://www.kaggle.com/competitions/playground-series-s5e4).
 ## Usage
 
 ### Basic CPU Implementation
@@ -31,67 +31,47 @@ from robust_huber_regression import RobustOnlineHuberRegressor
 import numpy as np
 
 # Initialize the model
+from Online_updating_Huber_robust_regression import RobustOnlineHuberRegressor
+import numpy as np
+
 model = RobustOnlineHuberRegressor(
-    k=1.345,           # Huber loss threshold
+    k=1.345,
     fit_intercept=True, 
-    reg_param=1e-4     # Regularization strength
+    reg_param=1e-4
 )
 
-# Train in batches
 for X_batch, y_batch in data_batches:
     model.fit_batch(X_batch, y_batch)
 
-# Finalize training
 model.finalize()
-
-# Make predictions
 predictions = model.predict(X_test)
 ```
 
 ### GPU Implementation with Data Pipeline
 
 ```python
-from robust_huber_regression_gpu import RobustOnlineHuberRegressorGPU, DataPipeline
+from Online_updating_Huber_robust_regression_on_GPU import RobustOnlineHuberRegressorGPU, DataPipeline
 import cupy as cp
 import time
 
-# Initialize GPU model
-model = RobustOnlineHuberRegressorGPU(
-    k=1.345, 
-    fit_intercept=True, 
-    reg_param=1e-4
-)
+model = RobustOnlineHuberRegressorGPU(k=1.345, fit_intercept=True, reg_param=1e-4)
+pipeline = DataPipeline(X_train_scaled, y_train, batch_size=50000, max_queue_size=3)
 
-# Initialize data pipeline with optimized parameters
-pipeline = DataPipeline(
-    X_train_scaled, 
-    y_train, 
-    batch_size=50000,      # Larger batch sizes for GPU efficiency
-    max_queue_size=3       # Queue size for background processing
-)
-
-# Start asynchronous data pipeline
 start_time = time.time()
 pipeline.start_pipeline()
 
-# Training loop with overlapped memory transfers
-batch_count = 0
-gpu_time = 0
-prev_stream = None
-
+batch_count, gpu_time, prev_stream = 0, 0, None
 while True:
-    # Get batch from queue (non-blocking with background thread)
     batch_data = pipeline.get_batch()
     if batch_data is None:
         break
-        
+    
+    # batch_data = (X_batch_gpu, y_batch_gpu, batch_id, stream)
     X_batch, y_batch, batch_id, stream = batch_data
     
-    # Synchronize previous GPU computation
     if prev_stream is not None:
         prev_stream.synchronize()
     
-    # GPU computation (overlapped with next batch memory transfer)
     gpu_start = time.time()
     model.fit_batch(X_batch, y_batch, stream)
     gpu_time += time.time() - gpu_start
@@ -100,22 +80,27 @@ while True:
     batch_count += 1
     prev_stream = stream
 
-# Final synchronization
 if prev_stream is not None:
     prev_stream.synchronize()
 
-# Stop pipeline and finalize model
 pipeline.stop_pipeline()
 model.finalize()
-
-# Performance statistics
-total_time = time.time() - start_time
-print(f"總時間: {total_time:.2f}秒")
-print(f"GPU 運算時間: {gpu_time:.2f}秒") 
-print(f"GPU 使用時間佔比: {gpu_time/total_time*100:.1f}%")
 ```
 
 ## Algorithm Details
+### CPU Version
+Initialization: Least Squares solution
+
+Optimization: Uses L-BFGS-B (via SciPy minimize) to optimize Huber loss
+
+Update Rule: Accumulate matrices A_total and b_total across batches
+
+### GPU Version
+Initialization: Least Squares solution
+
+Optimization: Custom gradient descent (100 iterations, fixed step size)
+
+Pipeline: Background thread loads data → Asynchronous CPU→GPU transfer → Overlapped GPU computation with CUDA streams
 
 ### Huber Loss Function
 
@@ -181,9 +166,11 @@ Performance improvements with GPU implementation:
 ## File Structure
 
 ```
-├── Online updating Huber robust regression.py        # CPU implementation
-├── Online updating Huber robust regression on GPU.py # GPU implementation with pipeline
-└── README.md                                         # This file
+Online-Updating-Huber-Robust-Regression/
+├── README.md                                          # This file
+├── huber_regressor.py                                 # 核心演算法實作
+├── Online updating Huber robust regression.py         # CPU version
+└── Online updating Huber robust regression on GPU.py  # GPU version                                   
 ```
 
 ## Requirements
@@ -205,3 +192,4 @@ Performance improvements with GPU implementation:
 ## References
 
 - Online Updating Huber Robust Regression for Big Data Streams
+- Kaggle Playground Series S5E4

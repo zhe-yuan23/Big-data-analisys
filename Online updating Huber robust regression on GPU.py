@@ -12,6 +12,7 @@ import seaborn as sns
 
 class RobustOnlineHuberRegressorGPU:
     def __init__(self, k=1.345, fit_intercept=True, reg_param=1e-4):
+        # 初始化模型參數 (Huber 閾值k、是否要截距、正則化參數)
         self.k = k
         self.fit_intercept = fit_intercept
         self.reg_param = reg_param
@@ -21,6 +22,7 @@ class RobustOnlineHuberRegressorGPU:
         self.intercept_ = 0.0 if fit_intercept else None
 
     def _huber_loss(self, theta, X, y):
+        """計算 Huber 損失 (小誤差平方、大誤差線性)"""
         residuals = y - X.dot(theta)
         loss = cp.where(cp.abs(residuals) <= self.k, 
                         0.5 * residuals**2,
@@ -28,6 +30,7 @@ class RobustOnlineHuberRegressorGPU:
         return cp.mean(loss)
 
     def _huber_grad(self, theta, X, y):
+        """計算 Huber 損失的梯度，用來做梯度下降"""
         residuals = y - X @ theta
         abs_r = cp.abs(residuals)
         mask = cp.where(abs_r <= self.k, 
@@ -37,6 +40,7 @@ class RobustOnlineHuberRegressorGPU:
         return grad / X.shape[0]
 
     def predict(self, X):
+        """用已訓練好的係數預測 y"""
         if isinstance(self.coef_, cp.ndarray):
             coef = cp.asnumpy(self.coef_)
         else:
@@ -50,7 +54,7 @@ class RobustOnlineHuberRegressorGPU:
         return X @ coef + intercept
 
     def fit_batch(self, X_batch, y_batch, stream=None):
-        # 在指定 stream 中執行 GPU 運算
+        """在指定 stream 中執行 GPU 運算"""
         with stream if stream is not None else cp.cuda.Stream.null:
             if self.fit_intercept:
                 X_batch = cp.column_stack([cp.ones(len(X_batch)), X_batch])
@@ -60,7 +64,7 @@ class RobustOnlineHuberRegressorGPU:
                 self.A_total = cp.eye(n_features) * self.reg_param
                 self.b_total = cp.zeros(n_features)
             
-            # 初始值用最小二乘
+            # 初始值用Least Squares Method
             theta_t = cp.linalg.lstsq(X_batch, y_batch, rcond=None)[0]
 
             # 手動梯度下降
@@ -74,6 +78,7 @@ class RobustOnlineHuberRegressorGPU:
             self.b_total += A_t @ theta_t
 
     def finalize(self):
+        """根據所有批次的累積統計量，解出最終模型係數"""
         self.A_total += cp.eye(self.A_total.shape[0]) * self.reg_param
         self.coef_ = cp.linalg.solve(self.A_total, self.b_total)
         
@@ -137,14 +142,14 @@ class DataPipeline:
         self.data_queue.task_done()
     
     def stop_pipeline(self):
-        """停止pipeline"""
+        """停止pipeline(發出結束信號並等待結束)"""
         self.finished = True
         if hasattr(self, 'thread'): # 判斷是否有thread屬性
-            self.thread.join() # join 等待執行序結束
+            self.thread.join() # .join 等待thread結束再繼續
 
 # 原始資料預處理 - 根據資料修改
 def preprocess_data(df):
-    """資料預處理 - 依據您的資料需求修改"""
+    """資料預處理 """
     categories = ['Genre', 'Publication_Day', 'Publication_Time', 'Episode_Sentiment']
     for col in categories:
         le = LabelEncoder()
