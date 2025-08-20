@@ -168,7 +168,7 @@ Performance improvements with GPU implementation:
 ```
 Online-Updating-Huber-Robust-Regression/
 ├── README.md                                          # This file
-├── huber_regressor.py                                 # 核心演算法實作
+├── huber_regressor.py                                 
 ├── Online updating Huber robust regression.py         # CPU version
 └── Online updating Huber robust regression on GPU.py  # GPU version                                   
 ```
