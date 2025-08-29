@@ -169,7 +169,7 @@ df = pd.read_csv("playground-series-s5e4/train.csv")
 # plt.title("Outlier Detection via Boxplot")
 # plt.show()
 
-# 2. 資料預處理 - 依據您的資料需求修改
+# 2. 資料預處理
 print(df[df["Episode_Length_minutes"] > 300])
 df = df.drop(101637, axis=0)  # 異常值處理
 
@@ -186,7 +186,7 @@ df["Number_of_Ads"] = df["Number_of_Ads"].fillna(df["Number_of_Ads"].median())
 # 類別編碼
 df = preprocess_data(df)
 
-# 3. 特徵和標籤分離 - 依據您的資料修改
+# 3. 特徵和標籤分離
 X = df.drop(columns=['Listening_Time_minutes', 'id', 'Episode_Title', "Podcast_Name"])
 y = df['Listening_Time_minutes']
 
