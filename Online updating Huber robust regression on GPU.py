@@ -161,7 +161,7 @@ def preprocess_data(df):
 # ========================================
 
 # 1. 載入資料
-df = pd.read_csv("playground-series-s5e4/train.csv")
+df = pd.read_csv("dataset/playground-series-s5e4/train.csv")
 # df.info()
 
 # plt.figure(figsize=(10, 6))
