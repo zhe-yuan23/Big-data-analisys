@@ -207,9 +207,9 @@ class DataPipeline:
             self.thread.join() # .join 等待thread結束再繼續
 
 # 原始資料預處理 - 根據資料修改
-def preprocess_data(df):
-    """資料預處理 """
-    categories = ['Genre', 'Publication_Day', 'Publication_Time', 'Episode_Sentiment']
+def preprocess_data(df,categories):
+    """處理類別型資料 """
+    # categories = ['Genre', 'Publication_Day', 'Publication_Time', 'Episode_Sentiment']
     for col in categories:
         le = LabelEncoder()
         df[col] = le.fit_transform(df[col].astype(str))
